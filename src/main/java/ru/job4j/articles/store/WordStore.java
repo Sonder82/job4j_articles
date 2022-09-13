@@ -2,7 +2,6 @@ package ru.job4j.articles.store;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import ru.job4j.articles.model.Article;
 import ru.job4j.articles.model.Word;
 
 import java.lang.ref.WeakReference;
