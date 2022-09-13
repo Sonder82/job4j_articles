@@ -69,7 +69,7 @@ public class WordStore implements Store<Word>, AutoCloseable {
                 Statement.RETURN_GENERATED_KEYS)) {
             statement.setString(1, model.getValue());
             statement.executeUpdate();
-            try(ResultSet genKey = statement.getGeneratedKeys()) {
+            try (ResultSet genKey = statement.getGeneratedKeys()) {
                 if (genKey.next()) {
                     model.setId(genKey.getInt(1));
                 }
