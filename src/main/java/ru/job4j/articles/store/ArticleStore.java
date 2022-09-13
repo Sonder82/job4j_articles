@@ -4,12 +4,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import ru.job4j.articles.model.Article;
 
+import java.lang.ref.WeakReference;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.SQLException;
-import java.sql.Statement;
+import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
@@ -45,8 +43,7 @@ public class ArticleStore implements Store<Article>, AutoCloseable {
     private void initScheme() {
         LOGGER.info("Инициализация таблицы статей");
         try (var statement = connection.createStatement()) {
-            var sql = Files.readString(Path.of("db/scripts", "articles.sql"));
-            statement.execute(sql);
+            statement.execute(Files.readString(Path.of("db/scripts", "articles.sql")));
         } catch (Exception e) {
             LOGGER.error("Не удалось выполнить операцию: { }", e.getCause());
             throw new IllegalStateException();
@@ -56,13 +53,14 @@ public class ArticleStore implements Store<Article>, AutoCloseable {
     @Override
     public Article save(Article model) {
         LOGGER.info("Сохранение статьи");
-        var sql = "insert into articles(text) values(?)";
-        try (var statement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+        try (var statement = connection.prepareStatement("insert into articles(text) values(?)",
+                Statement.RETURN_GENERATED_KEYS)) {
             statement.setString(1, model.getText());
             statement.executeUpdate();
-            var key = statement.getGeneratedKeys();
-            while (key.next()) {
-                model.setId(key.getInt(1));
+            try (ResultSet genKey = statement.getGeneratedKeys()) {
+                if (genKey.next()) {
+                    model.setId(genKey.getInt(1));
+                }
             }
         } catch (Exception e) {
             LOGGER.error("Не удалось выполнить операцию: { }", e.getCause());
@@ -74,21 +72,24 @@ public class ArticleStore implements Store<Article>, AutoCloseable {
     @Override
     public List<Article> findAll() {
         LOGGER.info("Загрузка всех статей");
-        var sql = "select * from articles";
-        var articles = new ArrayList<Article>();
-        try (var statement = connection.prepareStatement(sql)) {
-            var selection = statement.executeQuery();
-            while (selection.next()) {
-                articles.add(new Article(
-                        selection.getInt("id"),
-                        selection.getString("text")
-                ));
+        WeakReference<List<Article>> articles = new WeakReference<>(new ArrayList<>());
+        List<Article> list = articles.get();
+        if (list == null) {
+            try (var statement = connection.prepareStatement("select * from articles")) {
+                try (ResultSet selection = statement.executeQuery()) {
+                    while (selection.next()) {
+                        list.add(new Article(
+                                selection.getInt("id"),
+                                selection.getString("text")
+                        ));
+                    }
+                }
+            } catch (Exception e) {
+                LOGGER.error("Не удалось выполнить операцию: { }", e.getCause());
+                throw new IllegalStateException();
             }
-        } catch (Exception e) {
-            LOGGER.error("Не удалось выполнить операцию: { }", e.getCause());
-            throw new IllegalStateException();
         }
-        return articles;
+        return list;
     }
 
     @Override
